@@ -1,9 +1,9 @@
 import sys
 import json
 import re
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QHBoxLayout, QLabel, QFrame, QMessageBox
-from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QTextCursor, QTextCharFormat, QColor
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QHBoxLayout, QLabel, QFrame, QMessageBox, QToolButton
+from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtGui import QColor, QTextCharFormat, QCursor, QIcon
 
 class JsonViewer(QWidget):
     def __init__(self):
@@ -24,6 +24,9 @@ class JsonViewer(QWidget):
         self.output_layout = QVBoxLayout()
         self.button_layout = QHBoxLayout()
 
+        # Create a custom title bar layout (pin button will be here)
+        self.title_bar_layout = QHBoxLayout()
+
         # Create input frame
         self.input_text_box = QTextEdit(self)
         self.input_text_box.setPlaceholderText("Input JSON/Array")
@@ -31,23 +34,13 @@ class JsonViewer(QWidget):
         self.input_layout.addWidget(self.input_text_box)
         self.main_layout.addLayout(self.input_layout)
 
-        # Create buttons
-        self.format_button = QPushButton("Format JSON", self)
-        self.format_button.clicked.connect(self.format_json)
-        self.clear_button = QPushButton("Clear", self)
-        self.clear_button.clicked.connect(self.clear_text)
-        self.search_entry = QLineEdit(self)
-        self.search_button = QPushButton("Search", self)
-        self.search_button.clicked.connect(self.search_in_json)
-        self.pin_button = QPushButton("Pin", self)
+        # Pin Button in title bar (now part of title bar)
+        self.pin_button = QToolButton(self)
+        self.pin_button.setIcon(QIcon("icons/close.png"))  # Replace with your pin icon image path
+        self.pin_button.setIconSize(QSize(20, 20))  # Set the icon size
+        self.pin_button.setToolTip("Pin Window")
         self.pin_button.clicked.connect(self.toggle_pin)
-
-        self.button_layout.addWidget(self.format_button)
-        self.button_layout.addWidget(self.clear_button)
-        self.button_layout.addWidget(self.search_entry)
-        self.button_layout.addWidget(self.search_button)
-        self.button_layout.addWidget(self.pin_button)
-        self.main_layout.addLayout(self.button_layout)
+        self.title_bar_layout.addWidget(self.pin_button, alignment=Qt.AlignRight)
 
         # Create output frame
         self.output_text_box = QTextEdit(self)
@@ -56,15 +49,25 @@ class JsonViewer(QWidget):
         self.output_layout.addWidget(QLabel("Formatted JSON Output"))
         self.output_layout.addWidget(self.output_text_box)
         self.main_layout.addLayout(self.output_layout)
-        # Create a custom title bar layout (pin button will be here)
-        self.title_bar_layout = QHBoxLayout()
-        # Pin Button in title bar (now part of title bar)
-        self.pin_button = QPushButton("Pin", self)
-        self.pin_button.setFixedWidth(60)
-        self.pin_button.clicked.connect(self.toggle_pin)
-        self.title_bar_layout.addWidget(self.pin_button, alignment=Qt.AlignRight)
 
         self.setLayout(self.main_layout)
+
+        # Override the title bar and set custom title bar
+        self.setWindowFlags(Qt.FramelessWindowHint)  # Remove the default title bar
+        self.setWindowFlag(Qt.WindowStaysOnTopHint, self.is_pinned)
+        self.setWindowTitle("JSON Viewer PRO")
+
+        self.setWindowTitleBarWidget()
+
+    def setWindowTitleBarWidget(self):
+        """Set custom title bar with pin button."""
+        # Create a frame for the custom title bar
+        title_bar = QFrame(self)
+        title_bar.setLayout(self.title_bar_layout)
+        title_bar.setStyleSheet("background-color: lightgray; border: none; height: 30px;")
+
+        # Add the custom title bar to the window
+        self.main_layout.insertWidget(0, title_bar)
 
     def format_json(self):
         """Formats and displays the JSON or JavaScript array with coloring."""
@@ -108,12 +111,12 @@ class JsonViewer(QWidget):
         cursor.setPosition(0)
 
         # Apply coloring using regex
-        self.apply_tag(cursor, key_pattern, "key", QColor(0, 0, 255))
-        self.apply_tag(cursor, string_pattern, "string", QColor(0, 255, 0))
-        self.apply_tag(cursor, number_pattern, "number", QColor(255, 0, 0))
-        self.apply_tag(cursor, boolean_pattern, "boolean", QColor(255, 165, 0))
-        self.apply_tag(cursor, array_bracket_pattern, "array", QColor(128, 0, 128))
-        self.apply_tag(cursor, object_bracket_pattern, "object", QColor(139, 69, 19))
+        self.apply_tag(cursor, key_pattern, "key", 'blue')
+        self.apply_tag(cursor, string_pattern, "string", 'green')
+        self.apply_tag(cursor, number_pattern, "number", 'red')
+        self.apply_tag(cursor, boolean_pattern, "boolean", 'orange')
+        self.apply_tag(cursor, array_bracket_pattern, "array", 'purple')
+        self.apply_tag(cursor, object_bracket_pattern, "object", 'brown')
 
     def apply_tag(self, cursor, pattern, tag, color):
         """Helper function to apply tags to matched text."""
@@ -128,7 +131,21 @@ class JsonViewer(QWidget):
     def create_text_format(self, color):
         """Create text format for coloring"""
         fmt = QTextCharFormat()
-        fmt.setForeground(color)
+
+        # Map color names to QColor
+        color_map = {
+            'blue': QColor(0, 0, 255),        # Blue
+            'green': QColor(0, 255, 0),       # Green
+            'red': QColor(255, 0, 0),         # Red
+            'orange': QColor(255, 165, 0),    # Orange
+            'purple': QColor(128, 0, 128),    # Purple
+            'brown': QColor(139, 69, 19)      # Brown
+        }
+
+        # Use QColor for valid colors
+        if color in color_map:
+            fmt.setForeground(color_map[color])
+
         return fmt
 
     def search_in_json(self):
@@ -162,19 +179,12 @@ class JsonViewer(QWidget):
         """Toggles the 'always on top' status of the application."""
         self.is_pinned = not self.is_pinned
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.is_pinned)
-        self.pin_button.setText("Unpin" if self.is_pinned else "Pin")
+        self.pin_button.setIcon(QIcon("pin_icon.png" if not self.is_pinned else "unpinned_icon.png"))  # Update the icon
         self.show()
 
     def show_error(self, title, message):
         """Shows an error message dialog."""
         QMessageBox.critical(self, title, message)
-
-    def keyPressEvent(self, event):
-        """Handle key events."""
-        if event.key() == Qt.Key_Return:
-            # Enter key will trigger the search functionality
-            self.search_in_json()
-        super().keyPressEvent(event)
 
 
 if __name__ == '__main__':
