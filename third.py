@@ -1,7 +1,6 @@
 import sys
 import json
-import re
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QHBoxLayout, QLabel, QFrame, QMessageBox
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QPushButton, QTextEdit, QLineEdit, QHBoxLayout, QLabel, QMessageBox
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QTextCursor, QTextCharFormat, QColor
 from CustomTextEdit import CustomTextEdit
@@ -13,18 +12,13 @@ class JsonViewer(QWidget):
         self.setWindowTitle("JSON Viewer PRO")
         self.setGeometry(100, 100, 800, 700)
 
-        # Variables
-        self.search_results = []
-        self.search_index = 0
-        self.is_pinned = False
-
         # Layouts
         self.main_layout = QVBoxLayout(self)
         self.input_layout = QVBoxLayout()
         self.output_layout = QVBoxLayout()
         self.button_layout = QHBoxLayout()
 
-        # Create input frame
+        # Create input frame with the custom QTextEdit
         self.input_text_box = CustomTextEdit(self)
         self.input_text_box.setPlaceholderText("Input JSON/Array")
         self.input_layout.addWidget(QLabel("Input JSON/Array"))
@@ -41,7 +35,6 @@ class JsonViewer(QWidget):
         self.search_button.clicked.connect(self.search_in_json)
         self.pin_button = QPushButton("Pin", self)
         self.pin_button.clicked.connect(self.toggle_pin)
-
         self.button_layout.addWidget(self.format_button)
         self.button_layout.addWidget(self.clear_button)
         self.button_layout.addWidget(self.search_entry)
@@ -65,64 +58,50 @@ class JsonViewer(QWidget):
         if not input_text:
             self.output_text_box.clear()
             return  # Don't continue formatting if empty
-
         try:
             parsed = json.loads(input_text)
             formatted_json = json.dumps(parsed, indent=4)
             self.apply_syntax_coloring(formatted_json)
-
         except json.JSONDecodeError as e:
             self.show_error("Invalid JSON", f"Error in JSON: {str(e)}")
         except Exception as e:
             self.show_error("Error", f"An unexpected error occurred: {str(e)}")
 
+    def apply_syntax_coloring(self, json_text):
+        """Applies advanced syntax coloring to the formatted JSON."""
+        self.output_text_box.clear()
+        # Regex patterns for coloring
+        patterns = {
+            r'\"(.*?)\":': QColor(31, 123, 255),  # key
+            r'\"(.*?)\"(?=,|\n|\})': QColor(46, 139, 87),  # string
+            r'\b\d+\b': QColor(211, 47, 47),  # number
+            r'\b(true|false|null)\b': QColor(245, 124, 0),  # boolean
+            r'(\[|\])': QColor(117, 117, 117),  # array brackets
+            r'(\{|\})': QColor(156, 39, 176)  # object brackets
+        }
+        cursor = self.output_text_box.textCursor()
+        self.output_text_box.setPlainText(json_text)
+        for pattern, color in patterns.items():
+            self.apply_tag(cursor, pattern, color)
+
+    def apply_tag(self, cursor, pattern, color):
+        """Helper function to apply tags to matched text."""
+        cursor.setPosition(0)
+        format = QTextCharFormat()
+        format.setForeground(color)
+        regex = re.compile(pattern)
+        while True:
+            match = regex.search(self.output_text_box.toPlainText(), cursor.position())
+            if not match:
+                break
+            cursor.setPosition(match.start(), QTextCursor.MoveAnchor)
+            cursor.movePosition(QTextCursor.Right, QTextCursor.KeepAnchor, len(match.group(0)))
+            cursor.mergeCharFormat(format)
+
     def clear_text(self):
         """Clears both input and output text boxes."""
         self.input_text_box.clear()
         self.output_text_box.clear()
-
-    def apply_syntax_coloring(self, json_text):
-        """Applies advanced syntax coloring to the formatted JSON."""
-        self.output_text_box.clear()
-
-        # Regex patterns for coloring
-        key_pattern = r'\"(.*?)\":'
-        string_pattern = r'\"(.*?)\"(?=,|\n|\})'
-        number_pattern = r'\b\d+\b'
-        boolean_pattern = r'\b(true|false|null)\b'
-        array_bracket_pattern = r'(\[|\])'
-        object_bracket_pattern = r'(\{|\})'
-
-        # Insert text into the text box
-        self.output_text_box.setPlainText(json_text)
-
-        # Apply tags for different parts
-        cursor = self.output_text_box.textCursor()
-        cursor.setPosition(0)
-
-        # Apply coloring using regex
-        self.apply_tag(cursor, key_pattern, "key", QColor(31, 123, 255))
-        self.apply_tag(cursor, string_pattern, "string", QColor(46, 139, 87))
-        self.apply_tag(cursor, number_pattern, "number", QColor(211, 47, 47))
-        self.apply_tag(cursor, boolean_pattern, "boolean", QColor(245, 124, 0))
-        self.apply_tag(cursor, array_bracket_pattern, "array", QColor(117, 117, 117))
-        self.apply_tag(cursor, object_bracket_pattern, "object", QColor(156, 39, 176))
-
-    def apply_tag(self, cursor, pattern, tag, color):
-        """Helper function to apply tags to matched text."""
-        regex = re.compile(pattern)
-        for match in regex.finditer(self.output_text_box.toPlainText()):
-            start = match.start()
-            end = match.end()
-            cursor.setPosition(start)
-            cursor.movePosition(cursor.Right, cursor.KeepAnchor, end - start)
-            cursor.setCharFormat(self.create_text_format(color))
-
-    def create_text_format(self, color):
-        """Create text format for coloring"""
-        fmt = QTextCharFormat()
-        fmt.setForeground(color)
-        return fmt
 
     def search_in_json(self):
         """Searches for a term in the JSON output."""
@@ -130,25 +109,21 @@ class JsonViewer(QWidget):
         if not search_term:
             self.show_error("Error", "Search term is empty!")
             return
-
-        self.search_results.clear()
-        text = self.output_text_box.toPlainText()
-
-        # Perform search and highlight the results
+        self.search_results = []
         cursor = self.output_text_box.textCursor()
-        cursor.setPosition(0)
-        while cursor.hasSelection():
-            cursor.movePosition(cursor.NextCharacter, cursor.KeepAnchor)
-
-        self.highlight_current_search_result()
+        self.output_text_box.moveCursor(QTextCursor.Start)
+        while True:
+            cursor = self.output_text_box.find(search_term, cursor, QTextCursor.FindCaseSensitively)
+            if cursor.isNull():
+                break
+            cursor.movePosition(QTextCursor.WordRight, QTextCursor.KeepAnchor)
+            cursor.mergeCharFormat(self.create_text_format(QColor(255, 255, 0)))  # Highlight color
+            self.search_results.append(cursor)
 
     def highlight_current_search_result(self):
         """Highlights the current search result."""
         if self.search_results:
-            start, end = self.search_results[self.search_index]
-            cursor = self.output_text_box.textCursor()
-            cursor.setPosition(start)
-            cursor.movePosition(cursor.Right, cursor.KeepAnchor, end - start)
+            cursor = self.search_results[self.search_index]
             self.output_text_box.setTextCursor(cursor)
 
     def toggle_pin(self):
@@ -156,7 +131,6 @@ class JsonViewer(QWidget):
         self.is_pinned = not self.is_pinned
         self.setWindowFlag(Qt.WindowStaysOnTopHint, self.is_pinned)
         self.pin_button.setText("Unpin" if self.is_pinned else "Pin")
-        self.show()
 
     def show_error(self, title, message):
         """Shows an error message dialog."""
@@ -165,23 +139,11 @@ class JsonViewer(QWidget):
     def keyPressEvent(self, event):
         """Handle key events."""
         if event.key() == Qt.Key_Return:
-            # Enter key will trigger the search functionality
             self.search_in_json()
         super().keyPressEvent(event)
 
-    def pasteEvent(self, event):
-        """Override the paste event."""
-        super().pasteEvent(event)  # Call the base class pasteEvent to handle pasting
-        self.format_json()  # Automatically format JSON when pasted
-        print('Paste event detected!')  # Optional: debug print to verify
-
-
 if __name__ == '__main__':
-    try:
-        app = QApplication(sys.argv)
-        viewer = JsonViewer()
-        viewer.show()
-        sys.exit(app.exec_())
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        sys.exit(1)
+    app = QApplication(sys.argv)
+    viewer = JsonViewer()
+    viewer.show()
+    sys.exit(app.exec_())
